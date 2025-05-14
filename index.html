@@ -1,0 +1,671 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uvalde - HackMyVM - Easy - Bericht</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="nav-wrapper">
+        <div class="hamburger-nav-wrapper">
+            <input type="checkbox" id="hamburger-toggle">
+            <label id="hamburger-button" for="hamburger-toggle" aria-label="Menü öffnen">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+            </label>
+            <nav class="navbar" id="main-nav">
+                <a href="../../aboutme.html">Über mich</a>
+                <a href="../../index.html">HackMyVM</a>
+                <a href="../../vulnyx.html">Vulnyx</a>
+                <a href="../../vulnhub.html">Vulnhub</a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- HINWEIS: Die Hintergrundfarbe #03b5f5 muss im CSS für .header-bg gesetzt werden -->
+    <div class="header-bg">
+        <h1>Uvalde - HackMyVM - Level: Easy - Bericht</h1>
+        <div class="level-container">
+            <!-- HINWEIS: Die Farbe Rot muss im CSS für h2 in .level-container gesetzt werden -->
+            <h2>Easy</h2>
+            <div class="circle">
+                <!-- HINWEIS: Die Hintergrundfarbe Rot muss im CSS für .segment-* gesetzt werden -->
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <!-- HINWEIS: Die Hintergrundfarbe #03b5f5 muss im CSS für .inner gesetzt werden -->
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">ftp</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">base64</div>
+                <div class="tool-item">wfuzz</div>
+                <div class="tool-item">ssh</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">bash</div>
+                <div class="tool-item">echo</div>
+                <div class="tool-item">rm</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">toilet</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration">Web Enumeration</a></li>
+                <li><a href="#initial-access">Initial Access</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation</a></li>
+                <li><a href="#poc">Proof of Concept (Privilege Escalation)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis"><strong>Analyse:</strong> Der erste Schritt ist die Identifizierung aktiver Hosts im lokalen Netzwerksegment. `arp-scan -l` sendet ARP-Anfragen an alle möglichen Adressen im lokalen Netzwerk (LAN), um herauszufinden, welche IP-Adressen verwendet werden und welche MAC-Adressen ihnen zugeordnet sind. Dies ist eine schnelle Methode zur Host-Erkennung in lokalen Netzen, die oft effektiver ist als ein reiner Ping-Scan, da sie auf Layer 2 des OSI-Modells arbeitet und nicht auf Firewalls angewiesen ist, die ICMP (Ping) blockieren könnten.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Das Ergebnis `192.168.2.123` zeigt einen aktiven Host im Netzwerk. Die MAC-Adresse `08:00:27:c0:d7:d5` und der Hersteller `PCS Systemtechnik GmbH` (oft ein Hinweis auf VirtualBox oder ähnliche Virtualisierungssoftware durch die ersten drei Oktette 08:00:27) geben erste Hinweise auf das Zielsystem. Dies ist ein erfolgreicher erster Schritt, da wir nun eine konkrete IP-Adresse für weitere Scans haben.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die gefundene IP-Adresse sollte als Ziel für detailliertere Scans (z.B. mit Nmap) verwendet werden. Notieren Sie die MAC-Adresse und den Hersteller für spätere Referenzzwecke (OS-Fingerprinting, Virtualisierungserkennung).
+            <br><strong>Empfehlung (Admin):</strong> Netzwerk-Monitoring implementieren, um ungewöhnliche ARP-Scan-Aktivitäten zu erkennen. Segmentierung des Netzwerks kann die Reichweite solcher Scans einschränken.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>192.168.2.123	08:00:27:c0:d7:d5	PCS Systemtechnik GmbH</pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Nach der Identifizierung des Ziels (192.168.2.123) wird Nmap verwendet, um offene Ports, die darauf laufenden Dienste und deren Versionen zu scannen.
+            *   `-sS`: Führt einen SYN-Scan (Stealth-Scan) durch, der schneller und unauffälliger ist als ein voller TCP-Connect-Scan.
+            *   `-sC`: Führt Standard-Nmap-Skripte aus, um zusätzliche Informationen über Dienste zu sammeln (z.B. Default-Credentials, Konfigurationsdetails).
+            *   `-sV`: Versucht, die Versionen der laufenden Dienste zu ermitteln.
+            *   `-T5`: Stellt die Timing-Vorlage auf "Insane", was den Scan beschleunigt, aber potenziell ungenauer sein oder leichter entdeckt werden kann.
+            *   `-AO`: Versucht, das Betriebssystem des Ziels zu identifizieren.
+            *   `-p-`: Scannt alle 65535 TCP-Ports (statt nur der Standard-Ports).
+            </p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Scan war sehr erfolgreich und liefert wichtige Informationen:
+            *   **Port 21 (FTP):** Offen, läuft `vsftpd 3.0.3`. Wichtig: Anonymer Login ist erlaubt (`ftp-anon: Anonymous FTP login allowed`). Dies ist oft ein Einstiegspunkt.
+            *   **Port 22 (SSH):** Offen, läuft `OpenSSH 8.4p1` auf Debian. Dies könnte ein späterer Zugriffspunkt sein, falls Zugangsdaten gefunden werden. Die Hostkeys werden angezeigt.
+            *   **Port 80 (HTTP):** Offen, läuft `Apache httpd 2.4.54` auf Debian. Eine Webseite ist vorhanden (`http-title: Agency - Start Bootstrap Theme`). Webserver sind häufige Angriffsvektoren.
+            *   **OS-Erkennung:** Nmap vermutet Linux (Kernel 4.x oder 5.x), was mit Debian übereinstimmt.
+            *   **MAC-Adresse:** Bestätigt die VirtualBox-Umgebung.
+            Die offenen Ports und insbesondere der anonyme FTP-Zugang sind vielversprechende Angriffspunkte.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Priorisieren Sie den anonymen FTP-Zugang (Port 21) und die Webanwendung (Port 80) für weitere Untersuchungen. Untersuchen Sie den Inhalt des FTP-Servers und führen Sie Web-Enumeration/Scanning auf Port 80 durch. Halten Sie Port 22 (SSH) für spätere Zugriffsversuche bereit.
+            <br><strong>Empfehlung (Admin):</strong> Deaktivieren Sie anonymen FTP-Zugang, wenn er nicht zwingend erforderlich ist. Wenn er benötigt wird, beschränken Sie die Rechte und den Zugriff auf das Nötigste. Aktualisieren Sie alle Dienste (vsftpd, OpenSSH, Apache) auf die neuesten stabilen Versionen und wenden Sie Sicherheits-Patches an. Konfigurieren Sie den Webserver sicher (z.B. durch Deaktivieren unnötiger Module, Anpassen von Berechtigungen).</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sC -sV -T5 -AO 192.168.2.123 -p-</span></div>
+                    <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at 2023-04-08 02:11 CEST
+Nmap scan report for uvalde.hmv (192.168.2.123)
+Host is up (0.00013s latency).
+Not shown: 65532 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+21/tcp open  ftp     vsftpd 3.0.3
+| ftp-syst:
+|   STAT:
+| FTP server status:
+|      Connected to ffff:192.168.2.114
+|      Logged in as ftp
+|      TYPE: ASCII
+|      No session bandwidth limit
+|      Session timeout in seconds is 300
+|      Control connection is plain text
+|      Data connections will be plain text
+|      At session startup, client count was 2
+|      vsFTPd 3.0.3 - secure, fast, stable
+|_End of status
+| ftp-anon: Anonymous FTP login allowed (FTP code 230)
+|_-rw-r--r--    1 1000     1000         5154 Jan 28 20:54 output
+22/tcp open  ssh     OpenSSH 8.4p1 Debian 5+deb11u1 (protocol 2.0)
+| ssh-hostkey:
+|   3072 3a09a4dad7db99eea55105e9afe70890 (RSA)
+|   256 cb426abe22132cf257f980d1f7fb885c (ECDSA)
+|_  256 443cb40faac394fa231519e3e5185694 (ED25519)
+80/tcp open  http    Apache httpd 2.4.54 ((Debian))
+|_http-server-header: Apache/2.4.54 (Debian)
+|_http-title: Agency - Start Bootstrap Theme
+MAC Address: 08:00:27:21:CB:A1 (Oracle VirtualBox virtual NIC)
+Device type: general purpose
+Running: Linux 4.X|5.X
+OS CPE: cpe:/o:linux:linux_kernel:4 cpe:/o:linux:linux_kernel:5
+OS details: Linux 4.15 - 5.6
+Network Distance: 1 hop
+Service Info: OSs: Unix, Linux; CPE: cpe:/o:linux:linux_kernel
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.13 ms uvalde.hmv (192.168.2.123)
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 9.87 seconds</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="web-enumeration">
+            <h2>Web Enumeration</h2>
+            <p class="analysis"><strong>Analyse:</strong> `gobuster` wird verwendet, um Verzeichnisse und Dateien auf dem Webserver (Port 80) zu entdecken, die nicht direkt verlinkt sind.
+            *   `dir`: Gibt an, dass nach Verzeichnissen und Dateien gesucht wird (Directory/File bruteforcing).
+            *   `-u http://192.168.2.123`: Definiert die Ziel-URL.
+            *   `-x ...`: Eine umfangreiche Liste von Dateiendungen, nach denen zusätzlich zum Wörterbuch gesucht werden soll (z.B. `login.php`, `config.txt`).
+            *   `-w "/usr/share/seclists/..."`: Gibt die Wortliste an, die für die Suche verwendet wird (`directory-list-2.3-medium.txt` ist eine gebräuchliche, mittelgroße Liste).
+            *   `-b '403,404'`: Blendet Antworten mit den HTTP-Statuscodes 403 (Forbidden) und 404 (Not Found) aus, um die Ausgabe übersichtlicher zu gestalten.
+            *   `-e`: Erweiterter Modus, zeigt die vollständige URL für gefundene Verzeichnisse an.
+            *   `-t 100`: Verwendet 100 Threads, um die Suche zu beschleunigen.
+            *   `-n`: Kein Status-Update während des Scans anzeigen.
+            *   `-k`: Überspringt die Überprüfung des SSL-Zertifikats (hier für HTTP nicht relevant, aber oft nützlich).
+            </p>
+            <p class="evaluation"><strong>Bewertung:</strong> Gobuster hat mehrere interessante Pfade aufgedeckt:
+            *   `/img/`, `/css/`, `/js/`, `/vendor/`: Standardverzeichnisse für Web-Assets.
+            *   `/login.php`: Eine Login-Seite – ein potenzieller Angriffspunkt für Brute-Force oder Credential Stuffing.
+            *   `/index.php`: Die Hauptseite.
+            *   `/user.php`: Leitet zu `login.php` weiter, deutet auf einen geschützten Bereich hin.
+            *   `/mail/`: Könnte interessant sein, eventuell Webmail oder Konfigurationsdateien.
+            *   `/success.php`: Leitet zu `login.php` weiter, könnte nach einer erfolgreichen Aktion aufgerufen werden.
+            *   `/create_account.php`: Eine Seite zur Kontoerstellung – könnte für Angriffe missbraucht werden (z.B. Erstellung eines Angreiferkontos) oder Schwachstellen enthalten.
+            Die Funde, insbesondere `login.php` und `create_account.php`, sind wichtige Ergebnisse für die nächsten Schritte.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Untersuchen Sie die gefundenen PHP-Seiten (`login.php`, `create_account.php`, `user.php`, `success.php`) genauer auf Schwachstellen (z.B. SQL-Injection, XSS, schwache Authentifizierung). Analysieren Sie den Quellcode, falls zugänglich. Prüfen Sie das `/mail/` Verzeichnis.
+            <br><strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass alle Webanwendungen sicher entwickelt und konfiguriert sind. Implementieren Sie starke Authentifizierungsmechanismen und schützen Sie sich vor gängigen Webangriffen (OWASP Top 10). Beschränken Sie den Zugriff auf sensible Dateien und Verzeichnisse. Deaktivieren Sie Verzeichnisauflistungen (Directory Indexing), wenn nicht benötigt.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">gobuster dir -u http://192.168.2.123 -x txt,php,rar,zip,tar,pub,xls,docx,doc,sql,db,mdb,asp,aspx,accdb,bat,ps1,exe,sh,py,pl,gz,jpeg,jpg,png,html,phtml,xml,csv,dll,pdf,raw,rtf,xlsx,zip,kdbx -w "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt"  -b '403,404' -e -t 100 -n -k</span></div>
+                    <pre>
+http://192.168.2.123/img                  [Size: 312] [--> http://192.168.2.123/img/]
+http://192.168.2.123/login.php            [Size: 1022]
+http://192.168.2.123/index.php            [Size: 29604]
+http://192.168.2.123/user.php             [Size: 0] [--> login.php]
+http://192.168.2.123/mail                 [Size: 313] [--> http://192.168.2.123/mail/]
+http://192.168.2.123/css                  [Size: 312] [--> http://192.168.2.123/css/]
+http://192.168.2.123/js                   [Size: 311] [--> http://192.168.2.123/js/]
+http://192.168.2.123/success.php          [Size: 0] [--> login.php]
+http://192.168.2.123/vendor               [Size: 315] [--> http://192.168.2.123/vendor/]
+http://192.168.2.123/create_account.php   [Size: 1003]</pre>
+                </div>
+            </div>
+
+             <p class="analysis"><strong>Analyse:</strong> `nikto` ist ein Webserver-Scanner, der nach bekannten Schwachstellen, Fehlkonfigurationen und potenziell gefährlichen Dateien/Skripten sucht.
+            *   `-h http://192.168.2.123`: Definiert das Ziel.
+            *   `-C all`: Führt alle verfügbaren CGI-Verzeichnistests durch (umfassender, aber langsamer).
+            </p>
+            <p class="evaluation"><strong>Bewertung:</strong> Nikto hat mehrere informative Ergebnisse geliefert, die hauptsächlich auf fehlende Sicherheitsheader und Konfigurationsprobleme hinweisen:
+            *   **Fehlende Header:** `X-Frame-Options`, `X-XSS-Protection`, `X-Content-Type-Options`. Diese Header helfen, Clickjacking, Cross-Site-Scripting (XSS) und MIME-Sniffing-Angriffe zu verhindern oder abzuschwächen. Ihr Fehlen stellt ein potenzielles Risiko dar.
+            *   **Cookie ohne `httponly`:** Das `PHPSESSID`-Cookie hat nicht das `httponly`-Flag gesetzt. Das bedeutet, es kann über JavaScript ausgelesen werden, was bei einer XSS-Schwachstelle Session Hijacking ermöglicht.
+            *   **Directory Indexing:** Die Verzeichnisse `/css/`, `/img/` und `/mail/` erlauben die Auflistung ihres Inhalts. Dies kann unbeabsichtigt Informationen preisgeben.
+            *   **`package.json` gefunden:** Diese Datei gehört normalerweise zu Node.js-Anwendungen und kann sensible Informationen wie Abhängigkeiten, Skripte oder sogar Zugangsdaten enthalten. Ihr Vorhandensein auf einem Apache-Server ist ungewöhnlich und sollte untersucht werden.
+            Die Ergebnisse bestätigen einige der Gobuster-Funde und weisen auf wichtige Konfigurationsmängel hin.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie, die Verzeichnisse mit Directory Indexing nach interessanten Dateien zu durchsuchen. Laden und analysieren Sie die gefundene `package.json`. Nutzen Sie das Fehlen der Sicherheitsheader und das `httponly`-Flag als mögliche Angriffsvektoren, insbesondere in Kombination mit potenziellen XSS-Schwachstellen.
+            <br><strong>Empfehlung (Admin):</strong> Implementieren Sie die fehlenden Sicherheitsheader (`X-Frame-Options`, `X-XSS-Protection`, `X-Content-Type-Options`) in der Apache-Konfiguration. Setzen Sie das `httponly`- und `secure`-Flag für alle Session-Cookies. Deaktivieren Sie Directory Indexing global oder für spezifische Verzeichnisse. Untersuchen Sie, warum eine `package.json`-Datei vorhanden ist, und entfernen Sie sie, wenn sie nicht benötigt wird oder sensible Daten enthält.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nikto -h http://192.168.2.123 -C all</span></div>
+                    <pre>
+- Nikto v2.1.6
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.123
++ Target Hostname:    192.168.2.123
++ Target Port:        80
++ Start Time:         2023-04-08 02:12:45 (GMT2)
+---------------------------------------------------------------------------
++ Server: Apache/2.4.54 (Debian)
++ The anti-clickjacking X-Frame-Options header is not present.
++ The X-XSS-Protection header is not defined. This header can hint to the user agent to protect against some forms of XSS
++ The X-Content-Type-Options header is not set. This could allow the user agent to render the content of the site in a different fashion to the MIME type
++ Cookie PHPSESSID created without the httponly flag
++ Web Server returns a valid response with junk HTTP methods, this may cause false positives.
++ OSVDB-3268: /css/: Directory indexing found.
++ OSVDB-3092: /css/: This might be interesting...
++ OSVDB-3268: /img/: Directory indexing found.
++ OSVDB-3092: /img/: This might be interesting...
++ OSVDB-3268: /mail/: Directory indexing found.
++ OSVDB-3092: /mail/: This might be interesting...
++ /package.json: Node.js package file found. It may contain sensitive information.
++ 26522 requests: 0 error(s) and 12 item(s) reported on remote host
++ End Time:           2023-04-08 02:15:39 (GMT2) (174 seconds)
+---------------------------------------------------------------------------
++ 1 host(s) tested</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access</h2>
+            <p class="analysis"><strong>Analyse:</strong> Basierend auf dem Nmap-Ergebnis, dass anonymer FTP-Login erlaubt ist, wird hier versucht, sich mit dem FTP-Server zu verbinden.
+            *   `ftp 192.168.2.123`: Startet den Standard-FTP-Client und verbindet sich mit der Ziel-IP.
+            *   `Name: anonymous`: Gibt den Benutzernamen `anonymous` ein.
+            *   `Password:`: Ein leeres Passwort wird gesendet (typisch für anonymen Login).
+            </p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der anonyme Login war erfolgreich (`230 Login successful.`). Dies bestätigt die Nmap-Ergebnisse und gewährt uns Zugriff auf das FTP-Verzeichnis. Die Befehle `ls` und `ls -la` werden verwendet, um den Inhalt des Verzeichnisses aufzulisten. Es wird eine einzelne Datei namens `output` gefunden. Die Langform `ls -la` zeigt zusätzliche Details wie Berechtigungen und Eigentümer. Der Befehl `get output` lädt diese Datei auf das lokale System herunter.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Analysieren Sie den Inhalt der heruntergeladenen Datei `output`. Prüfen Sie, ob Schreibrechte im FTP-Verzeichnis bestehen (z.B. mit `put <testdatei>`), was für spätere Angriffe nützlich sein könnte (Hochladen von Web-Shells, Reverse Shells etc.). Hier scheint `put` ohne Dateinamen versucht worden zu sein, was fehlschlägt, aber die grundsätzliche Idee ist richtig.
+            <br><strong>Empfehlung (Admin):</strong> Wie bereits erwähnt, deaktivieren Sie anonymen FTP-Zugang, wenn nicht nötig. Wenn nötig, beschränken Sie die Rechte strikt (nur Lesezugriff, kein Schreibzugriff) und stellen Sie sicher, dass keine sensiblen Informationen im öffentlich zugänglichen Bereich liegen.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ftp 192.168.2.123</span></div>
+                    <pre>
+Connected to 192.168.2.123.
+220 (vsFTPd 3.0.3)
+Name (192.168.2.123:cyber): anonymous
+331 Please specify the password.
+Password:
+230 Login successful.
+Remote system type is UNIX.
+Using binary mode to transfer files.
+</pre>
+                    <div class="prompt">ftp> <span class="command">ls</span></div>
+                    <pre>
+229 Entering Extended Passive Mode (|||48155|)
+150 Here comes the directory listing.
+-rw-r--r--    1 1000     1000         5154 Jan 28 20:54 output
+226 Directory send OK.
+</pre>
+                     <div class="prompt">ftp> <span class="command">ls -la</span></div>
+                    <pre>
+229 Entering Extended Passive Mode (|||17747|)
+150 Here comes the directory listing.
+drwxr-xr-x    2 0        116          4096 Jan 28 20:55 .
+drwxr-xr-x    2 0        116          4096 Jan 28 20:55 ..
+-rw-r--r--    1 1000     1000         5154 Jan 28 20:54 output
+226 Directory send OK.
+</pre>
+                    <div class="prompt">ftp> <span class="command">get output</span></div>
+                    <pre>
+local: output remote: output
+229 Entering Extended Passive Mode (|||58185|)
+150 Opening BINARY mode data connection for output (5154 bytes).
+100% ||  5154      465.73 KiB/s    00:00 ETA
+226 Transfer complete.
+5154 bytes received in 00:00 (338.29 KiB/s)
+</pre>
+                    <div class="prompt">ftp> <span class="command">put</span></div>
+                     <pre></pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Die vom FTP-Server heruntergeladene Datei `output` wird mit `cat` angezeigt. Es scheint sich um eine Mitschrift einer Terminal-Sitzung zu handeln (`Script démarré...`, `Script terminé...`), die mit dem `script`-Befehl erstellt wurde. Die Mitschrift zeigt Befehle, die vom Benutzer `matthew` auf einem Debian-System ausgeführt wurden.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Diese Datei ist eine Goldgrube! Sie enthält extrem wertvolle Informationen:
+            *   **Benutzername:** `matthew` (uid=1000).
+            *   **System:** Debian.
+            *   **Home-Verzeichnis-Inhalt:** Eine Auflistung (`ls -al`) des Home-Verzeichnisses von `matthew` wird angezeigt. Wichtig ist die Datei `user.txt`, die wahrscheinlich die User-Flag enthält (`-rwx------ 1 matthew matthew   33 23 janv. 07:53 user.txt`). Die Berechtigungen (`-rwx------`) zeigen, dass nur `matthew` sie lesen/schreiben/ausführen kann.
+            *   **Potenzielle Hinweise:** Der `toilet`-Befehl ist nur Spielerei, aber die Existenz der Datei `typescript` und die verlinkte `.bash_history` nach `/dev/null` könnten von Interesse sein (auch wenn letzteres bedeutet, dass die History nicht gespeichert wird).
+            Der wichtigste Fund ist der Benutzername `matthew`.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Notieren Sie den Benutzernamen `matthew`. Dieser wird für weitere Angriffsversuche (z.B. SSH-Brute-Force, Login über die Webanwendung) benötigt. Versuchen Sie, das Passwort für `matthew` zu finden oder zu erraten.
+            <br><strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass sensible Informationen oder Sitzungsmitschriften nicht versehentlich auf öffentlich zugänglichen Diensten wie anonymem FTP landen. Überprüfen Sie regelmäßig die Konfiguration solcher Dienste und die darauf abgelegten Daten. Schulen Sie Benutzer im sicheren Umgang mit sensiblen Daten.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">cat output</span></div>
+                    <pre>
+Script démarré sur 2023-01-28 19:54:05+01:00 [TERM="xterm-256color" TTY="/dev/pts/0" COLUMNS="105" LINES="25"]
+matthew@debian:~$ id
+uid=1000(matthew) gid=1000(matthew) groupes=1000(matthew)
+matthew@debian:~$ ls -al
+total 32
+drwxr-xr-x 4 matthew matthew 4096 28 janv. 19:54 .
+drwxr-xr-x 3 root    root    4096 23 janv. 07:52 ..
+lrwxrwxrwx 1 root    root       9 23 janv. 07:53 .bash_history -> /dev/null
+-rw-r--r-- 1 matthew matthew  220 23 janv. 07:51 .bash_logout
+-rw-r--r-- 1 matthew matthew 3526 23 janv. 07:51 .bashrc
+drwx------ 3 matthew matthew 4096 23 janv. 08:04 .config
+drwxr-xr-x 3 matthew matthew 4096 23 janv. 08:04 .local
+-rw-r--r-- 1 matthew matthew  807 23 janv. 07:51 .profile
+-rw-r--r-- 1 matthew matthew    0 28 janv. 19:54 typescript
+-rwx------ 1 matthew matthew   33 23 janv. 07:53 user.txt
+matthew@debian:~$ toilet -f mono12 -F metal hackmyvm.eu
+                                                                                
+ ▄▄                            ▄▄                                               
+ ██                            ██                                               
+ ██▄████▄   ▄█████▄   ▄█████▄  ██ ▄██▀   ████▄██▄  ▀██  ███  ██▄  ▄██  ████▄██▄ 
+ ██▀   ██   ▀ ▄▄▄██  ██▀    ▀  ██▄██     ██ ██ ██   ██▄ ██    ██  ██   ██ ██ ██ 
+ ██    ██  ▄██▀▀▀██  ██        ██▀██▄    ██ ██ ██    ████▀    ▀█▄▄█▀   ██ ██ ██ 
+ ██    ██  ██▄▄▄███  ▀██▄▄▄▄█  ██  ▀█▄   ██ ██ ██     ███      ████    ██ ██ ██ 
+ ▀▀    ▀▀   ▀▀▀▀ ▀▀    ▀▀▀▀▀   ▀▀   ▀▀▀  ▀▀ ▀▀ ▀▀     ██        ▀▀     ▀▀ ▀▀ ▀▀ 
+                                                    ███                         
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+            ▄████▄   ██    ██                                                   
+           ██▄▄▄▄██  ██    ██                                                   
+           ██▀▀▀▀▀▀  ██    ██                                                   
+    ██     ▀██▄▄▄▄█  ██▄▄▄███                                                   
+    ▀▀       ▀▀▀▀▀    ▀▀▀▀ ▀▀                                                   
+                                                                                
+                                                                                
+matthew@debian:~$ exit
+exit
+
+Script terminé sur 2023-01-28 19:54:37+01:00 [COMMAND_EXIT_CODE="0"]</pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Es wurde eine URL entdeckt (vermutlich durch Untersuchung der Webanwendung oder aus anderen Quellen, die hier nicht gezeigt werden), die einen Base64-kodierten String als Parameter enthält: `http://192.168.2.123/success.php?dXNlcm5hbWU9ZGFya2JlbiZwYXNzd29yZD1kYXJrYmVuMjAyM0A2OTM4`. Der Base64-String wird extrahiert und mit `echo -n ... | base64 -d` dekodiert. `-n` verhindert, dass `echo` einen Zeilenumbruch hinzufügt, was die Dekodierung stören könnte.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Dekodierung enthüllt Zugangsdaten: `username=darkben&password=darkben2023@6938`. Dies ist ein kritischer Fund! Obwohl der Benutzername `darkben` nicht mit dem zuvor gefundenen `matthew` übereinstimmt, sind gefundene Zugangsdaten immer wertvoll. Es könnte sich um einen anderen Benutzer handeln, oder vielleicht ist das Passwort oder ein Teil davon wiederverwendet worden.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie, sich mit den gefundenen Zugangsdaten (`darkben`:`darkben2023@6938`) an den Diensten (SSH, Web-Login) anzumelden. Probieren Sie Variationen des Passworts für den Benutzer `matthew` (z.B. `matthew2023@????`). Das Muster `[Benutzername]2023@[Zahl]` scheint relevant zu sein.
+            <br><strong>Empfehlung (Admin):</strong> Übergeben Sie niemals Zugangsdaten oder andere sensible Informationen unverschlüsselt oder durch unsichere Kodierung (wie Base64) in URL-Parametern. Verwenden Sie stattdessen sichere Methoden wie POST-Requests über HTTPS und serverseitige Sessions. Vermeiden Sie schwache oder wiederverwendete Passwörter.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Kein Prompt im Originaltext, daher keiner hinzugefügt -->
+                     <pre>http://192.168.2.123/success.php?dXNlcm5hbWU9ZGFya2JlbiZwYXNzd29yZD1kYXJrYmVuMjAyM0A2OTM4</pre>
+                 </div>
+             </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">echo -n "dXNlcm5hbWU9ZGFya2JlbiZwYXNzd29yZD1kYXJrYmVuMjAyM0A2OTM4" | base64 -d</span></div>
+                    <pre>username=darkben&password=<span class="password">darkben2023@6938</span></pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Basierend auf dem Passwortmuster `[Benutzername]2023@[Zahl]` (abgeleitet aus den `darkben`-Credentials und dem Benutzernamen `matthew`) wird versucht, den numerischen Teil des Passworts für `matthew` über die Login-Seite (`login.php`) zu bruteforcen.
+            *   `for i in {1000..10000}; do echo $i; done > numbers.txt`: Erzeugt eine Datei `numbers.txt`, die alle Zahlen von 1000 bis 10000 enthält, jede in einer neuen Zeile.
+            *   `wfuzz`: Ein Tool zum Fuzzing von Webanwendungen.
+            *   `-X POST`: Sendet einen POST-Request.
+            *   `-d "username=matthew&password=matthew2023@FUZZ"`: Definiert die POST-Daten. `FUZZ` ist der Platzhalter, der durch die Werte aus der Wortliste ersetzt wird.
+            *   `-w numbers.txt`: Verwendet die zuvor erstellte Zahlendatei als Wortliste.
+            *   `-u http://uvalde.hmv/login.php`: Die Ziel-URL für den Login-Versuch. `uvalde.hmv` wird hier verwendet, was darauf hindeutet, dass möglicherweise ein Eintrag in der `/etc/hosts`-Datei gemacht wurde, um `uvalde.hmv` auf `192.168.2.123` aufzulösen, oder es wird DNS verwendet.
+            *   `--hh 1022`: Blendet Antworten aus (`Hide`), deren Charakteranzahl (`Chars`) 1022 beträgt. Dies basiert vermutlich auf der Beobachtung, dass fehlgeschlagene Login-Versuche eine Antwort mit 1022 Zeichen zurückgeben (siehe Gobuster-Output für `login.php`). Erfolgreiche Logins haben normalerweise eine andere Größe (oft 0 Zeichen bei einer 302-Weiterleitung).
+            </p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der `wfuzz`-Scan war erfolgreich! Er hat eine Antwort mit dem Statuscode 302 (Found/Redirect) und 0 Zeichen gefunden, als der Platzhalter `FUZZ` den Wert `1554` hatte. Dies deutet stark darauf hin, dass das korrekte Passwort für den Benutzer `matthew` lautet: `matthew2023@1554`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Verwenden Sie die gefundenen Zugangsdaten (`matthew`:`matthew2023@1554`), um sich per SSH (Port 22) am Zielsystem anzumelden.
+            <br><strong>Empfehlung (Admin):</strong> Implementieren Sie Schutzmaßnahmen gegen Brute-Force-Angriffe auf Login-Seiten, z.B. Account-Sperrungen nach mehreren Fehlversuchen (Fail2Ban), Captchas oder Ratenbegrenzung. Verwenden Sie keine vorhersagbaren Passwortmuster. Erzwingen Sie komplexe Passwörter.</p>
+            <div class="code-block">
+                <div class="terminal">
+                     <!-- Kein Prompt im Originaltext, daher keiner hinzugefügt -->
+                     <pre>for i in {1000..10000}; do echo $i; done > numbers.txt</pre>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wfuzz -X POST -d  "username=matthew&password=matthew2023@FUZZ" -w numbers.txt -u http://uvalde.hmv/login.php --hh 1022</span></div>
+                    <pre>
+
+ID           Response   Lines    Word       Chars       Payload
+===================================================================
+
+000000555:   302        0 L      0 W        0 Ch        "<span class="password">1554</span>"
+</pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Mit den durch `wfuzz` ermittelten Zugangsdaten wird nun versucht, sich per SSH als Benutzer `matthew` am Zielsystem anzumelden.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der SSH-Login war erfolgreich! Das Passwort `<span class="password">matthew2023@1554</span>` wurde akzeptiert. Wir haben nun eine interaktive Shell auf dem Zielsystem als Benutzer `matthew`. Dies markiert den erfolgreichen Abschluss der "Initial Access"-Phase.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Beginnen Sie mit der Enumeration des Systems aus der Sicht des Benutzers `matthew`. Suchen Sie nach Möglichkeiten zur Privilegienerweiterung (Privilege Escalation). Überprüfen Sie `sudo -l`, SUID-Binaries, Cron-Jobs, Kernel-Versionen, installierte Software etc. Lesen Sie die User-Flag (`user.txt`).
+            <br><strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass SSH-Zugang nur für notwendige Benutzer erlaubt ist und starke Passwörter oder (besser) Schlüssel-Authentifizierung verwendet wird. Überwachen Sie SSH-Logins auf verdächtige Aktivitäten.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ssh matthew@uvalde.hmv</span></div>
+                    <pre>
+matthew@uvalde.hmv's password: <span class="password">matthew2023@1554</span>
+
+Linux uvalde.hmv 5.10.0-20-amd64 #1 SMP Debian 5.10.158-2 (2022-12-13) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc//copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+matthew@uvalde:~$ </pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation</h2>
+
+            <p class="analysis"><strong>Analyse:</strong> Der Befehl `sudo -l` wird ausgeführt, um zu überprüfen, welche Befehle der aktuelle Benutzer (`matthew`) mit `sudo` (also potenziell mit den Rechten anderer Benutzer, meistens `root`) ausführen darf.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Ausgabe ist sehr aufschlussreich. Benutzer `matthew` darf den Befehl `/bin/bash /opt/superhack` als jeder Benutzer (`ALL : ALL`) ohne Passwortabfrage (`NOPASSWD:`) ausführen. Das bedeutet, `matthew` kann das Skript `/opt/superhack` mit `root`-Rechten starten, indem er `sudo /bin/bash /opt/superhack` ausführt. Dies ist eine klare und direkte Möglichkeit zur Privilegienerweiterung, wenn wir den Inhalt oder die Ausführung von `/opt/superhack` kontrollieren können.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Untersuchen Sie die Datei `/opt/superhack`. Prüfen Sie die Berechtigungen des Skripts und des Verzeichnisses `/opt`. Wenn das Skript oder das Verzeichnis für `matthew` schreibbar ist, kann das Skript durch einen bösartigen Befehl ersetzt werden, der dann mit `root`-Rechten ausgeführt wird.
+            <br><strong>Empfehlung (Admin):</strong> Konfigurieren Sie `sudo`-Rechte mit äußerster Vorsicht nach dem Prinzip der geringsten Rechte (Principle of Least Privilege). Erlauben Sie `NOPASSWD` nur in absolut notwendigen und gut kontrollierten Fällen. Vermeiden Sie es, Benutzern die Ausführung von Skripten oder Befehlen zu erlauben, die sie selbst ändern können, insbesondere wenn dies als `root` geschieht. Überprüfen Sie regelmäßig die `sudoers`-Konfiguration.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Prompt aus dem Text übernommen -->
+                     <div class="prompt">matthew@uvalde:~$ <span class="command">sudo -l</span></div>
+                     <pre>
+Matching Defaults entries for matthew on uvalde:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User matthew may run the following commands on uvalde:
+    (ALL : ALL) NOPASSWD: /bin/bash /opt/superhack</pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Es wird versucht, direkt eine Root-Shell mit `sudo -u root /bin/bash -p` zu starten. Der Parameter `-p` versucht, die effektive Benutzer-ID beizubehalten, was in Kombination mit `sudo` manchmal zu Root-Rechten führen kann, wenn `bash` falsch konfiguriert ist oder bestimmte `sudo`-Regeln gelten. `-u root` spezifiziert explizit, dass der Befehl als `root` ausgeführt werden soll.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Versuch schlägt fehl (`Sorry, user matthew is not allowed...`). Dies ist erwartet, da die `sudo -l`-Ausgabe nur die Ausführung von `/bin/bash /opt/superhack` erlaubt hat, nicht aber die direkte Ausführung von `/bin/bash -p`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Konzentrieren Sie sich auf die erlaubte `sudo`-Regel (`/bin/bash /opt/superhack`) als den primären Vektor für Privilege Escalation. Direkte Versuche, eine Root-Shell zu bekommen, sind hier nicht erfolgreich.
+            <br><strong>Empfehlung (Admin):</strong> Die `sudoers`-Konfiguration funktioniert wie vorgesehen und verhindert die nicht explizit erlaubte Ausführung von Befehlen. Dies ist ein Beispiel für eine korrekte, restriktive Konfiguration.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Prompt aus dem Text übernommen -->
+                     <div class="prompt">matthew@uvalde:~$ <span class="command">sudo -u root /bin/bash -p</span></div>
+                     <pre>
+Sorry, user matthew is not allowed to execute '/bin/bash -p' as root on uvalde.hmv.</pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Es werden grundlegende Enumerationsbefehle im Home-Verzeichnis des Benutzers `matthew` ausgeführt:
+            *   `ls /home`: Listet die Benutzerverzeichnisse in `/home` auf (hier nur `matthew`).
+            *   `pwd`: Zeigt das aktuelle Arbeitsverzeichnis (`/home/matthew`).
+            *   `ls -la`: Listet den Inhalt des aktuellen Verzeichnisses detailliert auf.
+            *   `cat user.txt`: Gibt den Inhalt der Datei `user.txt` aus.
+            </p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Befehle bestätigen die Umgebung und lesen erfolgreich die User-Flag aus der Datei `user.txt`. Die Flag lautet `<span class="password">6e4136fbed8f8c691996dbf42697d460</span>`. Dies ist ein wichtiger Meilenstein im Penetrationstest.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Dokumentieren Sie die gefundene User-Flag. Fahren Sie mit der Privilege Escalation fort, indem Sie die `sudo`-Regel ausnutzen.
+            <br><strong>Empfehlung (Admin):</strong> Die User-Flag ist für Capture-the-Flag-Szenarien gedacht. In realen Umgebungen sollten sensible Daten angemessen geschützt und nicht als einfache Textdateien im Home-Verzeichnis gespeichert werden.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Prompt aus dem Text übernommen -->
+                     <div class="prompt">matthew@uvalde:~$ <span class="command">ls /home</span></div>
+                     <pre>matthew</pre>
+                     <!-- Prompt aus dem Text übernommen -->
+                     <div class="prompt">matthew@uvalde:~$ <span class="command">pwd</span></div>
+                     <pre>/home/matthew</pre>
+                     <!-- Prompt aus dem Text übernommen -->
+                     <div class="prompt">matthew@uvalde:~$ <span class="command">ls -la</span></div>
+                     <pre>
+total 32
+drwxr-xr-x 4 matthew matthew 4096 Jan 31 20:27 .
+drwxr-xr-x 3 root    root    4096 Jan 31 20:27 ..
+lrwxrwxrwx 1 root    root       9 Jan 31 20:31 .bash_history -> /dev/null
+-rw-r--r-- 1 matthew matthew  220 Jan 31 20:27 .bash_logout
+-rw-r--r-- 1 matthew matthew 3526 Jan 31 20:27 .bashrc
+drwx------ 2 matthew matthew 4096 Feb  3 19:09 .config
+drwxr-xr-x 3 matthew matthew 4096 Jan 31 20:27 .local
+-rw-r--r-- 1 matthew matthew  807 Jan 31 20:27 .profile
+-rwx------ 1 matthew matthew   33 Jan 31 20:27 user.txt</pre>
+                     <!-- Prompt aus dem Text übernommen -->
+                     <div class="prompt">matthew@uvalde:~$ <span class="command">cat user.txt</span></div>
+                     <pre><span class="password">6e4136fbed8f8c691996dbf42697d460</span></pre>
+                 </div>
+             </div>
+
+             <!-- POC Abschnitt beginnt hier -->
+            <section id="poc">
+                <h2>Proof of Concept (Privilege Escalation via Sudo/Writable Script)</h2>
+                <p class="analysis"><strong>Kurzbeschreibung:</strong> Die `sudo`-Konfiguration erlaubt dem Benutzer `matthew` die passwortlose Ausführung des Skripts `/opt/superhack` mittels `/bin/bash`. Gleichzeitig hat der Benutzer `matthew` Schreibrechte auf das Verzeichnis `/opt` und/oder die Datei `/opt/superhack` selbst. Dies ermöglicht es, das Skript durch eigenen Code zu ersetzen, der dann mit Root-Rechten ausgeführt wird.</p>
+                <p class="analysis"><strong>Voraussetzungen:</strong>
+                    <ul>
+                        <li>SSH-Zugriff als Benutzer `matthew`.</li>
+                        <li>Fehlkonfigurierte `sudo`-Regel: `(ALL : ALL) NOPASSWD: /bin/bash /opt/superhack`.</li>
+                        <li>Schreibberechtigung für `matthew` auf `/opt` oder `/opt/superhack`.</li>
+                    </ul>
+                </p>
+                <p class="analysis"><strong>Schritt-für-Schritt-Anleitung:</strong></p>
+
+                <p class="analysis"><strong>1. Überprüfung der Berechtigungen im `/opt`-Verzeichnis:</strong> Zuerst wechseln wir in das Verzeichnis `/opt` und listen dessen Inhalt sowie die Berechtigungen auf.</p>
+                <p class="evaluation"><strong>Bewertung:</strong> Der Befehl `ls -la` im Verzeichnis `/opt` zeigt, dass das Verzeichnis selbst (`.` für das aktuelle Verzeichnis) die Berechtigungen `drwx---rwx` hat und `root:root` gehört. Entscheidend sind die letzten drei Zeichen `rwx`: Die Gruppe "others" (zu der `matthew` gehört, da er nicht `root` ist und nicht in der Gruppe `root` ist) hat Lese-, Schreib- und Ausführungsrechte auf das Verzeichnis `/opt`. Das bedeutet, `matthew` kann Dateien in `/opt` erstellen, löschen und ändern. Die Datei `superhack` existiert und gehört `root`, ist aber für `matthew` lesbar (`-rw-r--r--`).</p>
+                <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Da Schreibrechte im Verzeichnis `/opt` bestehen, kann die vorhandene Datei `superhack` gelöscht und durch eine neue, eigene Datei ersetzt werden.
+                <br><strong>Empfehlung (Admin):</strong> Verzeichnisse wie `/opt` sollten restriktive Berechtigungen haben. Schreibrechte für "others" sind fast immer eine Fehlkonfiguration und sollten entfernt werden (`chmod o-w /opt`). Dateien und Skripte, die über `sudo` ausgeführt werden, sollten niemals für die ausführenden Benutzer schreibbar sein.</p>
+                <div class="code-block">
+                    <div class="terminal">
+                        <!-- Prompt aus dem Text übernommen -->
+                        <div class="prompt">matthew@uvalde:~$ <span class="command">cd /opt/</span></div>
+                        <!-- Prompt aus dem Text übernommen -->
+                        <div class="prompt">matthew@uvalde:/opt$ <span class="command">ls -la</span></div>
+                        <pre>
+total 12
+drwx---rwx  2 root root 4096 Feb  5 10:03 .
+drwxr-xr-x 18 root root 4096 Jan 22 15:31 ..
+-rw-r--r--  1 root root 1594 Jan 31 20:27 superhack</pre>
+                    </div>
+                </div>
+
+                <p class="analysis"><strong>2. Ersetzen des originalen Skripts:</strong> Die originale Datei `/opt/superhack` wird gelöscht und anschließend eine neue Datei mit demselben Namen erstellt, die den Befehl zum Setzen des SUID-Bits auf `/bin/bash` enthält.</p>
+                <p class="evaluation"><strong>Bewertung:</strong> Das Löschen (`rm superhack`) ist erfolgreich, was die Schreibrechte im Verzeichnis bestätigt. Mit `echo "chmod u+s /bin/bash" > superhack` wird eine neue Datei `/opt/superhack` erstellt, die nun dem Benutzer `matthew` gehört und den Befehl `chmod u+s /bin/bash` enthält. Dieser Befehl setzt das SUID-Bit für die Bash-Shell. Wenn ein Programm mit gesetztem SUID-Bit ausgeführt wird, läuft es mit den Rechten des Dateieigentümers (in diesem Fall `root`), unabhängig davon, wer es startet.</p>
+                <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Das präparierte Skript ist nun bereit, mit `sudo` ausgeführt zu werden, um das SUID-Bit zu setzen.
+                <br><strong>Empfehlung (Admin):</strong> Die Schreibrechte auf `/opt` haben diese Manipulation ermöglicht. Berechtigungen müssen korrekt gesetzt sein.</p>
+                 <div class="code-block">
+                     <div class="terminal">
+                         <!-- Prompt aus dem Text übernommen -->
+                         <div class="prompt">matthew@uvalde:/opt$ <span class="command">rm superhack</span></div>
+                         <pre>rm: remove write-protected regular file 'superhack'? y</pre>
+                         <!-- Prompt aus dem Text übernommen -->
+                         <div class="prompt">matthew@uvalde:/opt$ <span class="command">ls -la</span></div>
+                         <pre>
+total 8
+drwx---rwx  2 root root 4096 Apr  8 02:47 .
+drwxr-xr-x 18 root root 4096 Jan 22 15:31 ..</pre>
+                         <!-- Prompt aus dem Text übernommen -->
+                         <div class="prompt">matthew@uvalde:/opt$ <span class="command">echo "chmod u+s /bin/bash" > superhack</span></div>
+                         <!-- Prompt aus dem Text übernommen -->
+                         <div class="prompt">matthew@uvalde:/opt$ <span class="command">ls -la</span></div>
+                         <pre>
+drwx---rwx  2 root    root    4096 Apr  8 02:48 .
+drwxr-xr-x 18 root    root    4096 Jan 22 15:31 ..
+-rw-r--r--  1 matthew matthew   20 Apr  8 02:48 superhack</pre>
+                     </div>
+                 </div>
+
+                <p class="analysis"><strong>3. Ausführen des manipulierten Skripts mit Sudo:</strong> Das neu erstellte Skript `/opt/superhack` wird nun über die erlaubte `sudo`-Regel ausgeführt.</p>
+                <p class="evaluation"><strong>Bewertung:</strong> Der Befehl `sudo -u root /bin/bash /opt/superhack` (oder einfach `sudo /bin/bash /opt/superhack`, da `root` der Standard ist) führt den Inhalt unserer Datei `/opt/superhack` (`chmod u+s /bin/bash`) mit Root-Rechten aus. Es gibt keine sichtbare Ausgabe, aber der Befehl wurde erfolgreich ausgeführt.</p>
+                <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Überprüfen Sie, ob das SUID-Bit auf `/bin/bash` gesetzt wurde.
+                <br><strong>Empfehlung (Admin):</strong> Protokollieren und überwachen Sie die Verwendung von `sudo`. Entfernen Sie die unsichere `sudo`-Regel.</p>
+                 <div class="code-block">
+                     <div class="terminal">
+                         <!-- Prompt aus dem Text übernommen -->
+                         <div class="prompt">matthew@uvalde:/opt$ <span class="command">sudo -u root /bin/bash /opt/superhack</span></div>
+                          <!-- Prompt aus dem Text übernommen -->
+                         <div class="prompt">matthew@uvalde:/opt$ <span class="command">ls -la</span></div>
+                         <pre>
+drwx---rwx  2 root    root    4096 Apr  8 02:48 .
+drwxr-xr-x 18 root    root    4096 Jan 22 15:31 ..
+-rw-r--r--  1 matthew matthew   20 Apr  8 02:48 superhack</pre>
+                     </div>
+                 </div>
+
+                <p class="analysis"><strong>4. Überprüfung des SUID-Bits:</strong> Mit `ls -la /bin/bash` wird überprüft, ob das SUID-Bit erfolgreich gesetzt wurde.</p>
+                <p class="evaluation"><strong>Bewertung:</strong> Die Ausgabe `-rwsr-xr-x` zeigt das `s` anstelle des `x` in den Benutzerberechtigungen. Das `s` steht für das gesetzte SUID-Bit. Unser Angriff war erfolgreich!</p>
+                <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Starten Sie nun `/bin/bash` mit dem Parameter `-p`, um eine Shell mit Root-Rechten zu erhalten.
+                <br><strong>Empfehlung (Admin):</strong> Überwachen Sie regelmäßig Systemdateien auf unerwartete Berechtigungsänderungen, insbesondere das SUID-Bit (`find / -type f -perm -4000 -ls`). Entfernen Sie das SUID-Bit von `/bin/bash` (`chmod u-s /bin/bash`) und beheben Sie die zugrundeliegende Schwachstelle (sudo-Regel, Verzeichnisberechtigungen).</p>
+                <div class="code-block">
+                    <div class="terminal">
+                        <!-- Prompt aus dem Text übernommen -->
+                        <div class="prompt">matthew@uvalde:/opt$ <span class="command">ls -la /bin/bash</span></div>
+                        <pre>
+-rwsr-xr-x 1 root root 1234376 Mar 27  2022 /bin/bash</pre>
+                    </div>
+                </div>
+
+                <p class="analysis"><strong>5. Erlangung der Root-Shell:</strong> Die Bash-Shell wird mit dem Parameter `-p` gestartet. Da das SUID-Bit gesetzt ist und die Datei `root` gehört, behält der gestartete Prozess die effektive Benutzer-ID (EUID) des Dateieigentümers (`root`).</p>
+                <p class="evaluation"><strong>Bewertung:</strong> Der Befehl `/bin/bash -p` öffnet eine neue Shell. Der Prompt ändert sich zu `bash-5.1#`, was oft auf eine Root-Shell hindeutet. Der Befehl `id` bestätigt dies: `uid=1000(matthew)` (unsere ursprüngliche Benutzer-ID) aber `euid=0(root)` (die effektive Benutzer-ID ist `root`). Fantastisch, der Root-Zugriff war erfolgreich! Nun haben wir unser Ziel erreicht.</p>
+                <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Sie haben nun volle Root-Rechte. Suchen Sie nach der Root-Flag (typischerweise in `/root/root.txt`). Führen Sie weitere Post-Exploitation-Schritte durch (Persistenz, Netzwerk-Pivoting etc.), falls erforderlich.
+                <br><strong>Empfehlung (Admin):</strong> Beheben Sie sofort die Schwachstelle (sudo-Regel, Berechtigungen, SUID-Bit entfernen). Analysieren Sie das System auf weitere Kompromittierungen.</p>
+                <div class="code-block">
+                    <div class="terminal">
+                        <!-- Prompt aus dem Text übernommen -->
+                        <div class="prompt">matthew@uvalde:/opt$ <span class="command">/bin/bash -p</span></div>
+                        <!-- Prompt aus dem Text übernommen -->
+                        <div class="prompt">bash-5.1# <span class="command">id</span></div>
+                        <pre>
+uid=1000(matthew) gid=1000(matthew) euid=0(root) groups=1000(matthew)</pre>
+                    </div>
+                </div>
+                <p class="evaluation"><strong>Risikobewertung:</strong> Hoch. Die Schwachstelle ermöglicht es einem lokalen Benutzer mit niedrigen Rechten (wie `matthew`), volle Root-Rechte auf dem System zu erlangen. Dies führt zur vollständigen Kompromittierung des Systems, einschließlich Zugriff auf alle Daten, Möglichkeit zur Installation von Malware, Störung des Betriebs und Nutzung des Systems für weitere Angriffe.</p>
+                <p class="recommendation"><strong>Empfehlungen zur Behebung:</strong>
+                    <ol>
+                        <li>Entfernen Sie die unsichere sudo-Regel für `/opt/superhack` aus der `/etc/sudoers`-Datei.</li>
+                        <li>Korrigieren Sie die Berechtigungen für das Verzeichnis `/opt`, indem Sie das Schreibrecht für "others" entfernen: `chmod o-w /opt`.</li>
+                        <li>Stellen Sie sicher, dass die Datei `/opt/superhack` (falls sie legitimerweise existieren soll) `root` gehört und nicht für andere Benutzer schreibbar ist.</li>
+                        <li>Entfernen Sie das SUID-Bit von `/bin/bash`, falls es gesetzt wurde: `chmod u-s /bin/bash`.</li>
+                        <li>Überprüfen Sie alle sudo-Regeln und Dateiberechtigungen auf ähnliche Schwachstellen.</li>
+                    </ol>
+                </p>
+            </section> <!-- POC Abschnitt endet hier -->
+
+            <p class="analysis"><strong>Analyse:</strong> Nachdem Root-Rechte erlangt wurden, wird in das `/root`-Verzeichnis gewechselt und dessen Inhalt aufgelistet. Anschließend wird die Datei `root.txt` ausgelesen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Befehle sind erfolgreich. Die Datei `root.txt` wird gefunden und ihr Inhalt, die Root-Flag `<span class="password">59ec54537e98a53691f33e81500f56da</span>`, wird angezeigt. Die Privilege Escalation und das Auslesen der finalen Flag waren erfolgreich.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Dokumentieren Sie die Root-Flag und die Schritte zur Privilege Escalation im Bericht. Bereinigen Sie Spuren, falls erforderlich (z.B. Entfernen des SUID-Bits von Bash, Löschen des modifizierten Skripts).
+            <br><strong>Empfehlung (Admin):</strong> Sichern Sie das `/root`-Verzeichnis und die darin enthaltenen Daten angemessen. Implementieren Sie die zuvor genannten Maßnahmen zur Behebung der Privilege-Escalation-Schwachstelle.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <!-- Prompt aus dem Text übernommen -->
+                    <div class="prompt">bash-5.1# <span class="command">cd /root/</span></div>
+                    <!-- Prompt aus dem Text übernommen -->
+                    <div class="prompt">bash-5.1# <span class="command">ls -la</span></div>
+                    <pre>
+drwx------  4 root root 4096 Feb  5 10:04 .
+drwxr-xr-x 18 root root 4096 Jan 22 15:31 ..
+lrwxrwxrwx  1 root root    9 Jan 22 15:38 .bash_history -> /dev/null
+-rw-r--r--  1 root root  571 Jan 31 20:27 .bashrc
+drwx------  2 root root 4096 Feb  3 19:08 .config
+drwxr-xr-x  3 root root 4096 Jan 31 20:27 .local
+-rw-r--r--  1 root root  161 Jan 31 20:27 .profile
+-rwx------  1 root root   33 Jan 31 20:27 root.txt</pre>
+                     <!-- Prompt aus dem Text übernommen -->
+                    <div class="prompt">bash-5.1# <span class="command">cat root.txt</span></div>
+                    <pre><span class="password">59ec54537e98a53691f33e81500f56da</span></pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="flags">
+             <!-- Flag-Container sorgt für Zentrierung -->
+             <div class="flag-container">
+                 <h2 class="flag-heading">Flags</h2>
+
+                 <!-- User Flag Eintrag -->
+                 <div class="flag-entry">
+                     <div class="flag-command">cat user.txt</div>
+                     <div class="flag-value"><span class="password">6e4136fbed8f8c691996dbf42697d460</span></div>
+                 </div>
+
+                 <!-- Root Flag Eintrag -->
+                 <div class="flag-entry">
+                     <div class="flag-command">cat root.txt</div>
+                     <div class="flag-value"><span class="password">59ec54537e98a53691f33e81500f56da</span></div>
+                 </div>
+             </div>
+         </section>
+ 
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 2023-04-08</p>
+    </footer>
+</body>
+</html>
